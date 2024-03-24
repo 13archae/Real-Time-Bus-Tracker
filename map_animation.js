@@ -1,72 +1,106 @@
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8" />
-<title>Add a default marker</title>
-<meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
-<script src="https://api.mapbox.com/mapbox-gl-js/v1.11.0/mapbox-gl.js"></script>
-<link href="https://api.mapbox.com/mapbox-gl-js/v1.11.0/mapbox-gl.css" rel="stylesheet" />
-<style>
-  body { margin: 0; padding: 0; }
-  #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+var map;
+var markers = [];
 
-.map-overlay {
-  position: absolute;
-  left: 0;
-  padding: 10px;
+// load map
+function init() {
+  console.log("in init()");
+  var myOptions = {
+    zoom: 14,
+    center: { lat: 42.35335, lng: -71.091525 },
+    mapTypeId: google.maps.MapTypeId.terrain,
+  };
+  var element = document.getElementById("map");
+  map = new google.maps.Map(element, myOptions);
+  addMarkers();
 }
- 
-</style>
-</head>
-<body>
-<div id="map"></div>
 
-<div class="map-overlay top">
-  <button style="font-size: 2em" onclick="move()">
-    Show stops between MIT and Harvard
-  </button>
-</div>
- 
-<script>
-  mapboxgl.accessToken = '';
+// Add bus markers to map
+async function addMarkers() {
+  // get bus data
+  var locations = await getBusLocations();
 
-  var map = new mapboxgl.Map({
-      container: 'map',
-      style: 'mapbox://styles/mapbox/streets-v11',
-      center: [-71.104081, 42.365554],
-      zoom: 14
+  // loop through data, add bus markers
+  locations.forEach(function (bus) {
+    var marker = getMarker(bus.id);
+    if (marker) {
+      moveMarker(marker, bus);
+    } else {
+      addMarker(bus);
+    }
   });
- 
-var marker = new mapboxgl.Marker()
-    .setLngLat([-71.092761, 42.357575])
-    .addTo(map);
 
-const busStops = [
-    [-71.093729, 42.359244], 
-    [-71.094915, 42.360175],
-    [-71.095800, 42.360698],
-    [-71.099558, 42.362953],
-    [-71.103476, 42.365248],
-    [-71.106067, 42.366806],
-    [-71.108717, 42.368355],
-    [-71.110799, 42.369192],
-    [-71.113095, 42.370218],
-    [-71.115476, 42.372085],
-    [-71.117585, 42.373016],
-    [-71.118625, 42.374863]
-];
-
-let counter = 0;
-function move(){
-  setTimeout(()=>{
-    if (counter >= busStops.length) return;
-    marker.setLngLat(busStops[counter]);
-    counter++;
-    move();
-  },1000); 
+  // timer
+  console.log(new Date());
+  setTimeout(addMarkers, 30000);
 }
 
-</script>
- 
-</body>
-</html>
+// Request bus data from MBTA
+async function getBusLocations() {
+  var url =
+    "https://api-v3.mbta.com/vehicles?api_key=ca34f7b7ac8a445287cab52fb451030a&filter[route]=1&include=trip";
+  var response = await fetch(url);
+  var json = await response.json();
+  return json.data;
+}
+
+// Request bus data from MBTA
+
+function addMarker(bus) {
+  var icon = getIcon(bus);
+  var marker = new google.maps.Marker({
+    position: {
+      lat: bus.attributes.latitude,
+      lng: bus.attributes.longitude,
+    },
+    map: map,
+    icon: icon,
+    id: bus.id,
+  });
+
+  const infoWindow = new google.maps.InfoWindow({
+    content: `<div id="content" >
+                Bearing:  ${bus.attributes.bearing}\u00B0 <br/>
+                Lat:  ${bus.attributes.latitude}\u00B0<br/>
+                Long:  ${bus.attributes.longitude}\u00B0<br/><br/>
+                Status:  ${bus.attributes.current_status}<br/>
+                Occupancy:  ${bus.attributes.occupancy_status}`,
+    arialabel: "BUS " + bus.attributes.label,
+    maxWidth: 300,
+  });
+
+  marker.addListener("click", () => {
+    infoWindow.open({
+      anchor: marker,
+      map,
+    });
+  });
+
+  markers.push(marker);
+}
+
+function getIcon(bus) {
+  // select icon based on bus direction
+  if (bus.attributes.direction_id === 0) {
+    return "images/red.png";
+  }
+  return "images/blue.png";
+}
+
+function moveMarker(marker, bus) {
+  // change icon if bus has changed direction
+  var icon = getIcon(bus);
+  marker.setIcon(icon);
+
+  // move icon to new lat/lon
+  marker.setPosition({
+    lat: bus.attributes.latitude,
+    lng: bus.attributes.longitude,
+  });
+}
+
+function getMarker(id) {
+  var marker = markers.find(function (item) {
+    return item.id === id;
+  });
+  return marker;
+}
